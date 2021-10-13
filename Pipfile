@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+"aws-cdk.core" = "*"
+"aws-cdk.aws-lambda" = "*"
+"aws-cdk.aws-appsync" = "*"
+"aws-cdk.aws-dynamodb" = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.8"

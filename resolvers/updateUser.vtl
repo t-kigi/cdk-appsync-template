@@ -1,0 +1,91 @@
+{
+    "version" : "2018-05-29",
+    "operation" : "UpdateItem",
+    "key" : {
+        "key": $util.dynamodb.toDynamoDBJson($ctx.args.key)
+    },
+
+    ## Set MetaData automatically
+    #set( $nextVersion = $ctx.args.version + 1 )
+    #set( $updated = $util.time.nowISO8601() )
+
+    ## update 用の expression を動的に構築する
+    #set( $expNames  = {} )
+    #set( $expValues = {} )
+    #set( $expSet = {} )
+    #set( $expRemove = [] )
+        
+    ## 更新用のキーを取得 (主キー系を除く)
+    #foreach( $entry in $ctx.args.entrySet() )
+        #if( $entry.key != "key" && $entry.key != "version" && $entry.key != "ttlArgs" )
+            $!{expNames.put("#${entry.key}", "${entry.key}")}
+            #if( (!$entry.value) && ("$!{entry.value}" == "") )
+                ## null 値が渡された場合、該当項目は Item から削除
+                $util.qr($!{expRemove.add("${entry.key}")})
+            #else
+                ## 非 null 値が渡された場合、該当項目を追加・更新
+                $!{expSet.put("${entry.key}", ":${entry.key}")}
+                $!{expValues.put(":${entry.key}", $entry.value)}
+            #end
+        #end
+    #end
+    
+    ## TTL の更新対応
+    #if ($!{ctx.args.ttlArgs})
+      #if ("$!{ctx.args.ttlArgs.expired}" != "")
+        $!{expNames.put("#ttl", "ttl")}
+        $!{expSet.put("ttl", ":ttl")}
+        $!{expValues.put(":ttl", ${ctx.args.ttlArgs.expired})}
+      #elseif ("$!{ctx.args.ttlArgs.expiredISO}" != "")
+        #set( $ttl = $util.time.parseISO8601ToEpochMilliSeconds(${ctx.args.ttlArgs.expiredISO}) / 1000 )
+        $!{expNames.put("#ttl", "ttl")}
+        $!{expSet.put("ttl", ":ttl")}
+        $!{expValues.put(":ttl", $ttl)}
+      #elseif ("$!{ctx.args.ttlArgs.delta}" != "")
+        #set( $ttl = $util.time.nowEpochSeconds() + ${ctx.args.ttlArgs.delta} )
+        $!{expNames.put("#ttl", "ttl")}
+        $!{expSet.put("ttl", ":ttl")}
+        $!{expValues.put(":ttl", $ttl)}
+      #elseif ("$!{ctx.args.ttlArgs.remove}" != "" && $!{ctx.args.ttlArgs.remove})
+        $!{expNames.put("#ttl", "ttl")}
+        $util.qr($!{expRemove.add("ttl")})
+      #end
+    #end
+
+    ## 更新用固定値 (version は +1 に上書き)
+    $util.qr($!{expValues.put(":version", $nextVersion)})
+    $util.qr($!{expValues.put(":updated", $updated)})
+    
+    ## 更新用の expression を構築
+    #set( $expression = "SET version = :version, updated = :updated" )
+    ## 値の追加・更新を実施
+    #foreach( $entry in $expSet.entrySet() )
+      #set( $expression = "${expression}, #${entry.key} = :${entry.key}" )
+    #end
+
+    ## 値の削除を実施
+    #if( !${expRemove.isEmpty()} )
+        #set( $expression = "${expression} REMOVE" )
+        #foreach( $entry in $expRemove )
+            #set( $expression = "${expression} #${entry}" )
+            #if ( $foreach.hasNext )
+                #set( $expression = "${expression}," )
+            #end
+        #end
+    #end
+    
+    ## 構築した SET, REMOVE で値を更新する
+    "update": {
+        "expression" : "${expression}",
+        "expressionNames": $util.toJson(${expNames}),
+        "expressionValues" : $util.dynamodb.toMapValuesJson(${expValues})
+    },
+    
+    ## 更新条件は取得時と同一のバージョンであること (楽観ロック)
+    "condition": {
+        "expression" : "version = :expectedVersion",
+        "expressionValues" : {
+            ":expectedVersion" : $util.dynamodb.toDynamoDBJson($ctx.args.version)
+        }
+    }
+}

@@ -1,0 +1,5 @@
+#if($ctx.error)
+    ## 何らかのエラーがある場合、エラーレスポンスを明示的に返す
+    $utils.error($ctx.error.message, $ctx.error.type)
+#end
+$util.toJson($ctx.result)

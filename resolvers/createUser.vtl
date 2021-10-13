@@ -1,0 +1,35 @@
+{
+    "version" : "2018-05-29",
+    "operation" : "PutItem",
+    "key" : {
+        "key": $util.dynamodb.toDynamoDBJson($ctx.args.key)
+    },
+
+    #set( $attr = $util.dynamodb.toMapValues($ctx.args) )
+    ## Set MetaData automatically
+    #set( $attr.version = $util.dynamodb.toNumber(1) )
+    #set( $attr.created = $util.dynamodb.toString($util.time.nowISO8601()) )
+    #set( $attr.updated = $attr.created )
+
+    ## Set Item TTL
+    #if ($!{attr.ttlArgs})
+      $util.qr($!{attr.remove('ttlArgs')})
+      #if ("$!{ctx.args.ttlArgs.expired}" != "")
+        #set( $attr.ttl = $util.dynamodb.toNumber(${ctx.args.ttlArgs.expired}) )
+      #elseif ("$!{ctx.args.ttlArgs.expiredISO}" != "")
+        #set( $ttl = $util.time.parseISO8601ToEpochMilliSeconds(${ctx.args.ttlArgs.expiredISO}) / 1000 )
+        #set( $attr.ttl = $util.dynamodb.toNumber($ttl) )
+      #elseif ("$!{ctx.args.ttlArgs.delta}" != "")
+        #set( $ttl = $util.time.nowEpochSeconds() + ${ctx.args.ttlArgs.delta} )
+        #set( $attr.ttl = $util.dynamodb.toNumber($ttl) )
+      #end
+    #end
+
+    "attributeValues": $util.toJson($attr),
+    "condition": {
+        "expression": "attribute_not_exists(#id)",
+        "expressionNames": {
+            "#id": "key",
+        },
+    }
+}

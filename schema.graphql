@@ -1,0 +1,47 @@
+# TTL 設置用。 上から優先的に適用
+input TTLArgs {
+  # 有効期限を unixtime で指定
+  expired: Int          
+  # 有効期限を ISOFormat の時刻表現で指定
+  expiredISO: String
+  # 現在時刻からの相対時間で指定 (単位: 秒)
+  delta: Int
+  # TTL を撤廃する (更新専用)
+  remove: Boolean
+}
+
+interface Meta {
+  version: Int!
+  created: String!
+  updated: String!
+  ttl: Int
+}
+
+
+type User implements Meta {
+  key: String!
+  name: String!
+  age: Int!
+  hobby: String
+  version: Int!
+  created: String!
+  updated: String!
+  ttl: Int
+}
+
+type Query {
+  hello: String
+  getUsers: [ User! ]
+}
+
+type Mutation {
+  createUser(
+      key: String!, name: String!, age: Int!, hobby: String
+      ttlArgs: TTLArgs
+  ): User
+  updateUser(
+      key: String!,
+      name: String, age: Int, hobby: String,
+      ttlArgs: TTLArgs, version: Int!
+  ): User
+}
